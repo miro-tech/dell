@@ -37,7 +37,7 @@ jobs:
       - name: Update Gist
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
-          GIST_ID: ${{ secrets.DELL_GIST_ID }}
+          GIST_ID: ${{ secrets.GIST_ID }}
         run: |
           set -e
 
