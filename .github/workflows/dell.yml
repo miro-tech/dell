@@ -1,0 +1,92 @@
+name: Dell VPN Update
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # каждые 30 минут
+    - cron: "0 2 * * *"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch Dell subscription
+        run: |
+          mkdir -p output
+          python dell_fetch.py --out output
+
+      - name: Show result
+        run: |
+          echo "=== URI count ==="
+          grep -c '://' output/dell_uris_all.txt || true
+
+          echo
+          echo "=== Files ==="
+          ls -lh output/
+
+      - name: Update Gist
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.DELL_GIST_ID }}
+        run: |
+          set -e
+
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ["GH_TOKEN"]
+          gist_id = os.environ["GIST_ID"]
+
+          files = {}
+
+          filenames = [
+              "dell_uris_all.txt",
+              "dell_uris.json",
+              "dell_sub_decoded.txt",
+          ]
+
+          for filename in filenames:
+              path = "output/" + filename
+
+              with open(path, "r", encoding="utf-8") as f:
+                  content = f.read()
+
+              files[filename] = {
+                  "content": content
+              }
+
+          payload = json.dumps({
+              "files": files
+          }).encode("utf-8")
+
+          request = urllib.request.Request(
+              f"https://api.github.com/gists/{gist_id}",
+              data=payload,
+              method="PATCH",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+                  "User-Agent": "Dell-VPN-Updater",
+              },
+          )
+
+          with urllib.request.urlopen(request, timeout=30) as response:
+              result = json.loads(response.read())
+
+          print("Gist updated successfully")
+          print("Gist:", result.get("html_url"))
+          PY
